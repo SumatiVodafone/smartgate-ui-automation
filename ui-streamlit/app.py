@@ -164,7 +164,7 @@ text-align:center;
 font-weight:600;
 color:#15803D;
 ">
-✅ Environmental(Maintenance Execution)
+✅ Environmental
 </div>
 
 <div style="
