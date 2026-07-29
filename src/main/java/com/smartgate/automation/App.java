@@ -1,25 +1,52 @@
 package com.smartgate.automation;
 
-import io.github.bonigarcia.wdm.WebDriverManager;
-import org.openqa.selenium.*;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+
+import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
-import java.nio.file.*;
-import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.bonigarcia.wdm.WebDriverManager;
 
 public class App {
+
+    private static final Path PROJECT_ROOT = Paths.get("").toAbsolutePath();
+    private static final Path DOWNLOAD_ROOT = PROJECT_ROOT.getParent().resolve("smartgate-downloads");
+    private static final Path DEFAULT_CHROME_USER_DATA_DIR = Paths.get(
+            System.getenv("LOCALAPPDATA"),
+            "Smartgate",
+            "Chrome User Data"
+    );
+
+    private static final String DEVICE_INFORMATION_URL
+            = "https://raw.githubusercontent.com/"
+            + "VFTV-Testing/Configs/Main/"
+            + "AVSB_GEN3_Configs/deviceInformation.json";
+
 
     /* =========================================================
        DASHBOARD URLS
        ========================================================= */
-
-    private static final String CT_LONGPLAYBACK_URL =
-        "https://vodafonevcoe.cloud.witbe.net/smartgate/d/TYM0n1z7q/service-identity-card"
+    private static final String CT_LONGPLAYBACK_BASE_URL
+            = "https://vodafonevcoe.cloud.witbe.net/smartgate/d/TYM0n1z7q/service-identity-card"
             + "?orgId=1"
             + "&from-dash=WAtJX5fVz"
             + "&from=now-30d"
@@ -29,9 +56,6 @@ public class App {
             + "&var-service=All"
             + "&var-feature=All"
             + "&var-releaseVersion=All"
-            + "&var-platform=AVSB"
-            + "&var-platform=GEN3"
-            + "&var-platform=GEN4_SGM"
             + "&var-experience=All"
             + "&var-groupBy=undefined"
             + "&var-KPI=serviceAvailability"
@@ -40,37 +64,38 @@ public class App {
             + "&var-resourceVersionType=production"
             + "&var-groupByFilter=qa.platform,qa.releaseVersion,qa.service,qa.category,qa.feature,qa.environmentVersion";
 
-    private static final String ZAPPING_URL =
-        "https://vodafonevcoe.cloud.witbe.net/smartgate/d/6sKfCdXGz/kpis-stats-table"
+    private static final String ZAPPING_URL
+            = "https://vodafonevcoe.cloud.witbe.net/smartgate/d/NUtCppuMz/channel-detailed-tests-on-experience-table"
             + "?orgId=1"
+            + "&from-dash=6sKfCdXGz"
+            + "&from=now-2d"
+            + "&to=now"
             + "&var-platform=All"
             + "&var-experience=All"
             + "&var-region=All"
             + "&var-cityName=All"
             + "&var-deviceName=All"
             + "&var-channelName=All"
-            + "&var-groupBy=experience"
-            + "&var-serviceProductionStatus=Production"
+            + "&var-groupBy=channelName"
+            + "&var-feedbackStastusList=All"
+            + "&var-serviceProductionStatus=All"
             + "&var-resourceVersionType=production"
-            + "&var-integrity=No"
+            + "&var-maestroUuid=06af0c4d-eae6-4f49-ab72-8d50b134bd18"
+            + "&var-integrity=All"
             + "&var-errorPieChart=5"
-            + "&from=now-30d"
-            + "&to=now";
+            + "&var-errorLabel=All";
 
-    private static final String ENV_DEVICE_URL =
-        "https://vodafonevcoe.cloud.witbe.net/smartgate/d/QacOvereSVz/service-overview-table"
+    private static final String ENV_DEVICE_BASE_URL
+            = "https://vodafonevcoe.cloud.witbe.net/smartgate/d/QacOvereSVz/service-overview-table"
             + "?orgId=1"
             + "&from-dash=WAtJX5fVz"
             + "&from=now-24h"
             + "&to=now"
             + "&var-category=CT"
-            + "&var-category=Environmental"
+            + "&var-category=Maintenance"
             + "&var-category=LongPlayback"
             + "&var-service=All"
             + "&var-feature=All"
-            + "&var-platform=AVSB"
-            + "&var-platform=GEN3"
-            + "&var-platform=GEN4_SGM"
             + "&var-experience=All"
             + "&var-releaseVersion=All"
             + "&var-environmentVersion=All"
@@ -79,6 +104,54 @@ public class App {
             + "&var-resourceVersionType=production"
             + "&var-errorPieChart=5"
             + "&var-errorLabel=All";
+
+    /* =========================================================
+   LOAD HARDWARE PLATFORMS FROM GITHUB
+   ========================================================= */
+    private static Set<String> getHardwarePlatforms() throws Exception {
+
+        Set<String> hardwarePlatforms = new TreeSet<>();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        try (InputStream inputStream = new URL(DEVICE_INFORMATION_URL).openStream()) {
+
+            JsonNode root = mapper.readTree(inputStream);
+
+            root.fields().forEachRemaining(entry -> {
+
+                JsonNode device = entry.getValue();
+
+                JsonNode hardware = device.get("Hardware");
+
+                if (hardware != null && !hardware.asText().isBlank()) {
+                    hardwarePlatforms.add(hardware.asText().trim());
+                }
+            });
+        }
+
+        System.out.println("Hardware platforms loaded from GitHub:");
+        hardwarePlatforms.forEach(System.out::println);
+
+        return hardwarePlatforms;
+    }
+
+    /* =========================================================
+   APPEND HARDWARE PLATFORMS TO DASHBOARD URL
+   ========================================================= */
+    private static String appendPlatforms(String baseUrl) throws Exception {
+
+        StringBuilder url = new StringBuilder(baseUrl);
+
+        Set<String> hardwarePlatforms = getHardwarePlatforms();
+        System.out.println("Adding " + hardwarePlatforms.size() + " hardware platforms to URL...");
+
+        for (String platform : hardwarePlatforms) {
+            url.append("&var-platform=").append(platform);
+        }
+
+        return url.toString();
+    }
 
     public static void main(String[] args) throws Exception {
 
@@ -104,23 +177,21 @@ public class App {
            ========================================================= */
         if (dashboardType.equalsIgnoreCase("Zapping")) {
 
-            downloadDir = Paths.get("C:\\projects\\smartgate-downloads\\Zapping");
+            downloadDir = DOWNLOAD_ROOT.resolve("Zapping");
             selectedUrl = ZAPPING_URL;
 
         } else if (
-            dashboardType.equalsIgnoreCase("Environmental")
-            || dashboardType.equalsIgnoreCase("Devices Without Test Execution")
-            || dashboardType.equalsIgnoreCase("DeviceNoExecution")
-        ) {
+                dashboardType.equalsIgnoreCase("Maintenance")
+                || dashboardType.equalsIgnoreCase("Devices Without Test Execution")
+                || dashboardType.equalsIgnoreCase("DeviceNoExecution")) {
 
-            downloadDir = Paths.get("C:\\projects\\smartgate-downloads\\Environmental-DeviceNoExecution");
-            selectedUrl = ENV_DEVICE_URL;
+            downloadDir = DOWNLOAD_ROOT.resolve("Maintenance-DeviceNoExecution");
+            selectedUrl = appendPlatforms(ENV_DEVICE_BASE_URL);
 
         } else {
 
-            // CT + LongPlayback
-            downloadDir = Paths.get("C:\\projects\\smartgate-downloads\\CT-LongPlayback");
-            selectedUrl = CT_LONGPLAYBACK_URL;
+            downloadDir = DOWNLOAD_ROOT.resolve("CT-LongPlayback");
+            selectedUrl = appendPlatforms(CT_LONGPLAYBACK_BASE_URL);
         }
 
         Files.createDirectories(downloadDir);
@@ -145,10 +216,17 @@ public class App {
         /* =========================================================
            PERSIST LOGIN SESSION
            ========================================================= */
-        Path profileDir = Paths.get("C:\\selenium-profile").toAbsolutePath();
-        Files.createDirectories(profileDir);
+        String chromeUserDataDir = System.getenv().getOrDefault(
+                "SMARTGATE_CHROME_USER_DATA_DIR",
+                DEFAULT_CHROME_USER_DATA_DIR.toString()
+        );
+        String chromeProfileName = System.getenv().getOrDefault(
+                "SMARTGATE_CHROME_PROFILE_NAME",
+                "Default"
+        );
 
-        options.addArguments("--user-data-dir=" + profileDir.toString());
+        options.addArguments("--user-data-dir=" + Paths.get(chromeUserDataDir).toAbsolutePath());
+        options.addArguments("--profile-directory=" + chromeProfileName);
         options.setExperimentalOption("prefs", prefs);
 
         WebDriver driver = new ChromeDriver(options);
@@ -173,15 +251,15 @@ public class App {
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(60));
 
             WebElement csvBtn = wait.until(
-                ExpectedConditions.elementToBeClickable(
-                    By.xpath("//span[normalize-space()='CSV Export']")
-                )
+                    ExpectedConditions.elementToBeClickable(
+                            By.xpath("//span[normalize-space()='CSV Export']")
+                    )
             );
 
             long beforeDownload = System.currentTimeMillis();
 
             ((JavascriptExecutor) driver)
-                .executeScript("arguments[0].click();", csvBtn);
+                    .executeScript("arguments[0].click();", csvBtn);
 
             /* =========================================================
                WAIT FOR DOWNLOAD

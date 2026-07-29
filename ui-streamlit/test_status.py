@@ -21,7 +21,7 @@ MASTER_SERVICES = {
         "Tune Live TV Via TVGuide_GR_MCAST_To_DTT", "VOD", "Wakeup From Standby",
         "Youtube", "nPVR"
     ],
-    "environmental": [
+    "maintenance": [
         "BT Validation", "Device Health Status", "Network Validation",
         "Technical & System Integration"
     ],
