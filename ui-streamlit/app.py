@@ -94,7 +94,7 @@ font-weight:700;
 color:#15803D;
 line-height:1.2;
 ">
-All Executions Completed ✅
+All Scenarios Executed ✅
 </div>
 
 <div style="
@@ -1989,6 +1989,23 @@ with col7:
         disabled=st.session_state.refresh_in_progress
     )
 
+if dashboard_type == "All":
+    csv_dashboard = "CT"
+
+elif dashboard_type == "CT Dashboard":
+    csv_dashboard = "CT"
+
+elif dashboard_type == "Long Playback":
+    csv_dashboard = "LongPlayback"
+
+elif dashboard_type == "Environmental":
+    csv_dashboard = "Environmental"
+
+elif dashboard_type == "No Device Execution":
+    csv_dashboard = "No Device Execution"
+
+elif dashboard_type == "Zapping":
+    csv_dashboard = "Zapping"
 
 if refresh_clicked:
 
@@ -2022,23 +2039,6 @@ for master_df in (ct_master_df, env_master_df, zap_master_df):
             .str.strip()
             .str.lower()
         )
-if dashboard_type == "All":
-    csv_dashboard = "CT"
-
-elif dashboard_type == "CT Dashboard":
-    csv_dashboard = "CT"
-
-elif dashboard_type == "Long Playback":
-    csv_dashboard = "LongPlayback"
-
-elif dashboard_type == "Environmental":
-    csv_dashboard = "Environmental"
-
-elif dashboard_type == "No Device Execution":
-    csv_dashboard = "No Device Execution"
-
-elif dashboard_type == "Zapping":
-    csv_dashboard = "Zapping"
 
 # ---------- LOAD LATEST CSV ----------
 df = load_latest_csv(csv_dashboard)
